@@ -178,6 +178,7 @@ struct CutoutPreview: View {
         return CGSize(width: image.width * s, height: image.height * s)
     }
 
+    @MainActor
     private func load() async {
         source = nil
         result = nil
@@ -198,6 +199,7 @@ struct CutoutPreview: View {
         }
     }
 
+    @MainActor
     private func refresh() async {
         guard let source, let url else { return }
         // Let a slider settle before re-rendering.

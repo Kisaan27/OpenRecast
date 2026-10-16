@@ -154,6 +154,7 @@ struct TrimEditor: View {
         return Int(playback.current * 4)
     }
 
+    @MainActor
     private func refreshPoster(_ url: URL) async {
         guard posterTime != nil else { return }
         try? await Task.sleep(for: .milliseconds(140))
@@ -161,6 +162,7 @@ struct TrimEditor: View {
         if let frame = await MediaPreview.frame(url, at: playback.current, height: 360), !Task.isCancelled { poster = frame }
     }
 
+    @MainActor
     private func prepare(_ url: URL) async {
         let ext = url.pathExtension.lowercased()
         isVideo = !(FileKind.is(url, .audio) || MediaExt.audio.contains(ext))
@@ -390,7 +392,8 @@ private struct PlayerSurface: NSViewRepresentable {
 
 // MARK: - Playback
 
-@MainActor
+/// Drives an AVPlayer for the trim editor. Used from the main thread only: the async loaders are
+/// main-actor methods, and the time observer reports on the main queue.
 @Observable
 final class Playback {
     enum Status: Equatable { case loading, ready, preparing, unavailable }
@@ -410,6 +413,7 @@ final class Playback {
 
     var canPlay: Bool { status == .ready && player != nil }
 
+    @MainActor
     func load(_ url: URL, video: Bool) async {
         teardown()
         status = .loading
@@ -432,11 +436,13 @@ final class Playback {
         }
     }
 
+    @MainActor
     func makeVideoProxy(_ url: URL) async {
         status = .preparing
         if !(await makeProxy(url, video: true)) { status = .unavailable }
     }
 
+    @MainActor
     private func makeProxy(_ url: URL, video: Bool) async -> Bool {
         let dest = Output.temporary(ext: video ? "mp4" : "m4a")
         let args = video
@@ -461,7 +467,7 @@ final class Playback {
         self.player = player
         status = .ready
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
-            MainActor.assumeIsolated { self?.tick(time.seconds) }
+            self?.tick(time.seconds)
         }
     }
 
