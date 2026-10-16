@@ -17,7 +17,7 @@ if [[ ! -f Resources/AppIcon.icns ]]; then
   swift scripts/make_icon.swift Resources/AppIcon.icns
 fi
 
-echo "Assembling $APP…"
+echo "Assembling ${APP}…"
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
 cp "$BUILD/OpenRecast" "$APP/Contents/MacOS/OpenRecast"
