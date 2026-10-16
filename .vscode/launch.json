@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:OpenRecast}",
+            "name": "Debug OpenRecast",
+            "target": "OpenRecast",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug OpenRecast"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:OpenRecast}",
+            "name": "Release OpenRecast",
+            "target": "OpenRecast",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release OpenRecast"
+        }
+    ]
+}

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenRecast · private file studio for Mac</title>
+<meta name="description" content="Convert, compress and clean up video, audio, images, PDFs, documents and archives on your Mac. Offline, free, unlimited.">
+<style>
+  :root {
+    --bg: #eeeae3; --panel: #e5e0d6; --ink: #1d1b18; --muted: #6f685e; --accent: #c8643b; --line: rgba(29,27,24,.09);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121110; --panel: #1a1917; --ink: #ede8e0; --muted: #8e877c; --accent: #e58a5c; --line: rgba(237,232,224,.09); }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .09; z-index: 2;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .glow { position: fixed; right: -20vw; top: 10vh; width: 70vw; height: 70vw; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent), transparent 65%); pointer-events: none; }
+  main { position: relative; max-width: 1040px; margin: 0 auto; padding: 72px 24px 56px; z-index: 1; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+  h1 { font: 400 clamp(56px, 11vw, 112px)/1 "New York", "Iowan Old Style", Georgia, serif; letter-spacing: -.03em; margin: 8px 0 18px; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 520px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 34px 0 14px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 24px; border-radius: 999px; font-weight: 600;
+    text-decoration: none; background: var(--accent); color: #fff; }
+  .btn.quiet { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+  .fine { font-size: 13px; color: var(--muted); }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+  .badge { font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-top: 72px; }
+  .card { padding: 20px; border-radius: 18px; background: color-mix(in srgb, var(--panel) 75%, transparent); border: 1px solid var(--line); }
+  .card h3 { display: flex; align-items: center; gap: 10px; font: 400 22px "New York", Georgia, serif; margin-bottom: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; }
+  .card p { font-size: 14px; color: var(--muted); }
+  .install { margin-top: 64px; padding: 24px; border-radius: 18px; border: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent); }
+  .install h2 { font: 400 26px "New York", Georgia, serif; margin-bottom: 10px; }
+  .install ol { padding-left: 20px; color: var(--muted); }
+  .install li { margin: 4px 0; }
+  footer { margin-top: 56px; font-size: 13px; color: var(--muted); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<main>
+  <div class="eyebrow">Private file studio for Mac</div>
+  <h1>OpenRecast</h1>
+  <p class="lede">Convert, compress and clean up video, audio, images, PDFs, documents and archives right on your Mac. No uploads, no accounts, no limits.</p>
+
+  <div class="cta">
+    <a class="btn" id="download" href="#">Download for Mac</a>
+    <a class="btn quiet" id="source" href="#">View source</a>
+  </div>
+  <div class="fine">Free · macOS 14 Sonoma or later · Apple Silicon · 32 MB</div>
+
+  <div class="badges">
+    <span class="badge">🔒 Works offline</span>
+    <span class="badge">∞ Unlimited files</span>
+    <span class="badge">👁 Nothing leaves your Mac</span>
+    <span class="badge">🪶 ~25 MB memory</span>
+  </div>
+
+  <section class="grid">
+    <div class="card"><h3><span class="dot" style="background:#E8875A"></span>Video</h3><p>MP4, MOV, MKV, WebM, AVI, GIF. Compress, trim, change container, extract audio.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#E0B04C"></span>Audio</h3><p>MP3, M4A, WAV, FLAC, AIFF, OGG, Opus. Trim, normalize, pair with cover art.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#86B98F"></span>Image</h3><p>JPG, PNG, HEIC, WebP, AVIF, TIFF, GIF, BMP, ICO. Resize, compress, strip location data.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#B592DE"></span>Background</h3><p>Remove solid backgrounds, lift signatures, key out green screens in photos and video.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#DA5F55"></span>PDF</h3><p>Merge, split, compress, rotate, lock and unlock. Images to PDF and back.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#7BA4DB"></span>Documents</h3><p>DOCX, DOC, ODT, RTF, HTML, TXT to each other or to PDF.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#B79A78"></span>Archive</h3><p>Create ZIP, 7Z, TAR. Extract ZIP, 7Z, RAR, TAR, GZ, XZ, ISO.</p></div>
+    <div class="card"><h3><span class="dot" style="background:#5CB8B2"></span>Security</h3><p>SHA-256 and friends for any file size. Verify downloads against published hashes.</p></div>
+  </section>
+
+  <section class="install">
+    <h2>Installing</h2>
+    <ol>
+      <li>Open the downloaded <b>OpenRecast .dmg</b> and drag OpenRecast into Applications.</li>
+      <li>On first launch macOS will block it. Go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</li>
+      <li>That's it. Every file you work on stays on your Mac.</li>
+    </ol>
+  </section>
+
+  <footer>Open source under the MIT License. Bundles ffmpeg (GPL).</footer>
+</main>
+<script>
+  // On GitHub Pages (owner.github.io/repo) link straight to the latest release.
+  (function () {
+    var owner = location.hostname.split(".")[0];
+    var repo = location.pathname.split("/").filter(Boolean)[0] || "OpenRecast";
+    var base = "https://github.com/" + owner + "/" + repo;
+    document.getElementById("download").href = base + "/releases/latest";
+    document.getElementById("source").href = base;
+  })();
+</script>
+</body>
+</html>
