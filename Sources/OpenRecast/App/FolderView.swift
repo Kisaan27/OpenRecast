@@ -4,6 +4,8 @@ struct FolderView: View {
     @Environment(AppModel.self) private var app
     let category: Category
     let toolID: String?
+    @State private var search = SearchState()
+    @FocusState private var searchFocused: Bool
 
     private var tools: [ToolInfo] { Toolbox.tools(in: category) }
     private var current: ToolInfo { tools.first { $0.id == toolID } ?? tools[0] }
@@ -48,19 +50,28 @@ struct FolderView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 12)
 
-            ScrollView {
-                VStack(spacing: 3) {
-                    ForEach(tools) { tool in
-                        Button {
-                            app.route = .folder(category, toolID: tool.id)
-                        } label: {
-                            ToolRowLabel(tool: tool, selected: tool.id == current.id)
+            SearchField(search: search, focused: $searchFocused, placeholder: "Search all tools", onOpen: open)
+                .padding(.top, 16)
+
+            Group {
+                if search.isActive {
+                    SearchResults(search: search, showsCategory: true, onOpen: open)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 3) {
+                            ForEach(tools) { tool in
+                                Button {
+                                    app.route = .folder(category, toolID: tool.id)
+                                } label: {
+                                    ToolRowLabel(tool: tool, selected: tool.id == current.id)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
-            .padding(.top, 16)
+            .padding(.top, 10)
             .padding(.horizontal, -7)
 
             Spacer(minLength: 8)
@@ -78,5 +89,15 @@ struct FolderView: View {
         }
         .padding(.horizontal, 22)
         .padding(.bottom, 20)
+    }
+
+    private func open(_ tool: ToolInfo) {
+        search.query = ""
+        searchFocused = false
+        if tool.category == category {
+            app.route = .folder(category, toolID: tool.id)
+        } else {
+            app.open(tool.category, tool: tool.id)
+        }
     }
 }

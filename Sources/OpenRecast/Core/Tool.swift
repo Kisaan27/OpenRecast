@@ -124,6 +124,8 @@ struct JobContext: @unchecked Sendable {
 /// One feature. Add a class conforming to this, then list it in its folder's `Toolbox` entry.
 protocol FileTool: AnyObject {
     var options: AnyView? { get }
+    /// Heading shown above `options`.
+    var optionsTitle: String { get }
     func validate(_ inputs: [URL]) -> String?
     /// Called whenever the file list changes, so a tool can tailor its options to what was dropped.
     func inputsChanged(_ inputs: [URL])
@@ -132,6 +134,7 @@ protocol FileTool: AnyObject {
 
 extension FileTool {
     var options: AnyView? { nil }
+    var optionsTitle: String { "Options" }
     func validate(_ inputs: [URL]) -> String? { nil }
     func inputsChanged(_ inputs: [URL]) {}
 }

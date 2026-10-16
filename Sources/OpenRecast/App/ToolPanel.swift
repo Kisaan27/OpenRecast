@@ -35,8 +35,8 @@ struct ToolPanel: View {
             header
             inputs.padding(.top, 20)
             if let options = tool.options {
-                Text("OPTIONS").eyebrow().padding(.top, 22).padding(.bottom, 8)
-                options.disabled(isRunning)
+                Text(tool.optionsTitle.uppercased()).eyebrow().padding(.top, 22).padding(.bottom, 8)
+                options.disabled(isRunning).layoutPriority(1)
             }
             Spacer(minLength: 12)
             result

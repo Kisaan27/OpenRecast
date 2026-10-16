@@ -205,24 +205,51 @@ final class CompressVideoTool: FileTool {
 
 @Observable
 final class TrimTool: FileTool {
-    var start = "0:00"
-    var end = ""
+    var start = 0.0
+    /// nil keeps everything to the end of the file.
+    var end: Double?
     var fast = true
+    var media: URL?
+    var duration: Double?
 
-    var options: AnyView? { AnyView(Options(tool: self)) }
+    var optionsTitle: String { "Trim" }
+    var options: AnyView? { AnyView(TrimEditor(tool: self)) }
+
+    /// Where the kept part ends, in seconds.
+    var endTime: Double { end ?? duration ?? 0 }
+
+    func inputsChanged(_ inputs: [URL]) {
+        guard inputs.first != media else { return }
+        media = inputs.first
+        start = 0
+        end = nil
+        duration = nil
+        guard let url = media else { return }
+        Task { @MainActor in
+            let d = await FFmpeg.probe(url).duration
+            if self.media == url { self.duration = d }
+        }
+    }
+
+    func setStart(_ t: Double) {
+        let limit = end ?? duration ?? .greatestFiniteMagnitude
+        start = min(max(t, 0), max(limit - 0.1, 0))
+    }
+
+    func setEnd(_ t: Double) {
+        let v = max(t, start + 0.1)
+        if let duration, v >= duration - 0.01 { end = nil } else { end = v }
+    }
 
     func validate(_ inputs: [URL]) -> String? {
-        guard let s = TimeCode.parse(start) else { return "Start time should look like 1:30 or 90." }
-        if !end.isEmpty {
-            guard let e = TimeCode.parse(end) else { return "End time should look like 2:45 or 165." }
-            if e <= s { return "End time must be after the start." }
-        }
+        if let end, end <= start { return "The end must come after the start." }
+        if let duration, start >= duration { return "The start is past the end of the file." }
         return nil
     }
 
     func run(_ inputs: [URL], _ ctx: JobContext) async throws -> JobOutput {
-        guard let url = inputs.first, let s = TimeCode.parse(start) else { return JobOutput() }
-        let e = end.isEmpty ? nil : TimeCode.parse(end)
+        guard let url = inputs.first else { return JobOutput() }
+        let (s, e, fast): (Double, Double?, Bool) = await MainActor.run { (self.start, self.end, self.fast) }
         let total = await FFmpeg.probe(url).duration
         var args: [String] = []
         if let e { args += ["-t", String(e - s)] }
@@ -233,22 +260,6 @@ final class TrimTool: FileTool {
         let dest = Output.url(for: url, in: ctx.folder(for: url), suffix: " trimmed", ext: url.pathExtension.lowercased())
         try await FFmpeg.convert(url, args, to: dest, ctx, before: ["-ss", String(s)], duration: length > 0 ? length : nil)
         return JobOutput(files: [dest])
-    }
-
-    struct Options: View {
-        @Bindable var tool: TrimTool
-        var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
-                OptionRow("Start") { TextField("0:00", text: $tool.start).fieldStyle(width: 110) }
-                OptionRow("End") {
-                    TextField("end of file", text: $tool.end).fieldStyle(width: 110)
-                    Text("e.g. 1:30 or 01:02:03.5").font(.system(size: 11.5)).foregroundStyle(Theme.muted)
-                }
-                OptionRow("Mode") {
-                    Chips(selection: $tool.fast, options: [(true, "Instant · cuts at nearest keyframe"), (false, "Exact · re-encodes")])
-                }
-            }
-        }
     }
 }
 

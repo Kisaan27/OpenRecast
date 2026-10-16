@@ -230,4 +230,11 @@ enum TimeCode {
         }
         return total
     }
+
+    /// "1:05.3", or "1:02:03.5" past an hour. Rounds down so it never shows a time past `seconds`.
+    static func format(_ seconds: Double) -> String {
+        let tenths = Int((max(seconds, 0) * 10).rounded(.down))
+        let h = tenths / 36000, m = tenths / 600 % 60, s = tenths / 10 % 60, f = tenths % 10
+        return h > 0 ? String(format: "%d:%02d:%02d.%d", h, m, s, f) : String(format: "%d:%02d.%d", m, s, f)
+    }
 }

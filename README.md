@@ -18,12 +18,12 @@ Grab the latest `OpenRecast-x.y.z.dmg` from [Releases](../../releases), open it,
 
 | Folder | Tools |
 |---|---|
-| 🎬 **Video** | Convert (MP4, MOV, MKV, WebM, AVI, GIF) · Compress · Trim · Change container without re-encoding · Video to GIF · Extract audio |
-| 🎵 **Audio** | Convert (MP3, M4A, WAV, FLAC, AIFF, OGG, Opus) · Trim · Normalize loudness · Audio + image → MP4 |
+| 🎬 **Video** | Convert (MP4, MOV, MKV, WebM, AVI, GIF) · Compress · Trim on a visual timeline with playback · Change container without re-encoding · Video to GIF · Extract audio |
+| 🎵 **Audio** | Convert (MP3, M4A, WAV, FLAC, AIFF, OGG, Opus) · Trim on a waveform with playback · Normalize loudness · Audio + image → MP4 |
 | 🖼 **Image** | Convert (JPG, PNG, HEIC, WebP, AVIF, TIFF, GIF, BMP, ICO) · Resize · Compress · Remove location and camera metadata |
-| ✂️ **Background** | Remove solid backgrounds · Signature cleanup · Green screen photo · Green screen video (ProRes 4444 / WebM with alpha) |
+| ✂️ **Background** | Remove backgrounds with on-device AI (Apple Vision) or by colour, with a live before/after preview · Signature cleanup · Green screen photo · Green screen video (ProRes 4444 / WebM with alpha) |
 | 📕 **PDF** | Merge · Split · Compress · Rotate · Add or remove password · Images → PDF (no recompression) · PDF → images |
-| 📄 **Documents** | DOCX, DOC, ODT, RTF, HTML and TXT to each other · Print to PDF |
+| 📄 **Documents** | Edit documents (formatting, find & replace, automatic tidy-ups) · DOCX, DOC, ODT, RTF, HTML and TXT to each other · Print to PDF |
 | 📦 **Archive** | Create ZIP, 7Z, TAR.GZ, TAR.XZ · Extract ZIP, 7Z, RAR, TAR, GZ, BZ2, XZ, ISO |
 | 🛡 **Security** | SHA-256 / SHA-512 / SHA-1 / MD5 checksums (streamed, works on huge files) · Verify a download against a published hash |
 

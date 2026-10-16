@@ -10,7 +10,8 @@ struct OpenRecastApp: App {
             RootView()
         }
         .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1020, height: 680)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
@@ -65,6 +66,6 @@ struct RootView: View {
             }
         }
         .environment(app)
-        .frame(width: 940, height: 600)
+        .frame(minWidth: 940, idealWidth: 1020, minHeight: 600, idealHeight: 680)
     }
 }

@@ -5,6 +5,8 @@ struct HomeView: View {
     @State private var hovered: Category?
     @State private var dropActive = false
     @State private var dropped: DroppedFiles?
+    @State private var search = SearchState()
+    @FocusState private var searchFocused: Bool
 
     private let categories = Category.allCases
     private let span = 62.0 // degrees either side of the dial's left-pointing axis
@@ -15,11 +17,14 @@ struct HomeView: View {
             let w = geo.size.width, h = geo.size.height
             let center = CGPoint(x: w - 4, y: h / 2)
             let radius = (h / 2 - margin) / CGFloat(sin(span * .pi / 180))
+            let angles = DialLayout.angles(count: categories.count, span: span, radius: radius)
 
             ZStack(alignment: .topLeading) {
                 Dial(center: center, radius: radius, tint: hovered?.tint)
 
-                BrandPanel(hovered: hovered)
+                BrandPanel(hovered: hovered, search: search, searchFocused: $searchFocused) { tool in
+                    app.open(tool.category, tool: tool.id)
+                }
                     .frame(width: 440, height: h, alignment: .leading)
                     .padding(.leading, 58)
 
@@ -32,7 +37,7 @@ struct HomeView: View {
                         let tool = Toolbox.tools(in: category).first { t in urls.contains(where: t.accepts) }
                         app.open(category, tool: tool?.id, files: urls)
                     }
-                    .position(point(index, center: center, radius: radius))
+                    .position(point(angles[index], center: center, radius: radius))
                 }
             }
             .frame(width: w, height: h)
@@ -53,11 +58,62 @@ struct HomeView: View {
         .sheet(item: $dropped) { DropSuggestions(urls: $0.urls) }
     }
 
-    /// Folders sit at equal steps along the arc, so every gap between neighbours is the same.
-    private func point(_ index: Int, center: CGPoint, radius: CGFloat) -> CGPoint {
-        let n = Double(categories.count - 1)
-        let a = ((180 - span) + Double(index) * (2 * span / n)) * .pi / 180
+    private func point(_ degrees: Double, center: CGPoint, radius: CGFloat) -> CGPoint {
+        let a = degrees * .pi / 180
         return CGPoint(x: center.x + radius * CGFloat(cos(a)), y: center.y - radius * CGFloat(sin(a)))
+    }
+}
+
+/// Places the folders along the dial so they read as evenly spaced, whether neighbours are stacked or diagonal.
+///
+/// Folders are wider than tall, so no spacing on a circle keeps both the centre-to-centre distance and the
+/// edge-to-edge gap constant. Equal angles leave the diagonal pairs at the ends nearly touching; equal box gaps
+/// push them far apart. Treating each folder as an oval and equalising the gap between ovals sits in between:
+/// centre distances stay within a few percent, and the end folders keep their breathing room.
+enum DialLayout {
+    /// The folder artwork's footprint (see `FolderIcon`, size 62).
+    static let folder = CGSize(width: 62, height: 62 * 0.82)
+
+    /// Angles in degrees, 180 pointing left, running from `180 - span` to `180 + span`.
+    static func angles(count: Int, span: Double, radius: CGFloat) -> [Double] {
+        guard count > 1 else { return [180] }
+        // Find the one gap that, stepped out from the top end, lands the last folder exactly on the bottom end.
+        var lo = -40.0, hi = Double(radius)
+        for _ in 0..<40 {
+            let mid = (lo + hi) / 2
+            if walk(gap: mid, count: count, span: span, radius: radius).last! < 180 + span { lo = mid } else { hi = mid }
+        }
+        var result = walk(gap: (lo + hi) / 2, count: count, span: span, radius: radius)
+        result[count - 1] = 180 + span
+        return result
+    }
+
+    private static func walk(gap: Double, count: Int, span: Double, radius: CGFloat) -> [Double] {
+        var angles = [180 - span]
+        for _ in 1..<count {
+            let a = angles.last!
+            // Smallest step that opens up `gap` points between the two folders.
+            var lo = 0.0, hi = 120.0
+            for _ in 0..<40 {
+                let mid = (lo + hi) / 2
+                if distance(a, a + mid, radius: radius) < gap { lo = mid } else { hi = mid }
+            }
+            angles.append(a + (lo + hi) / 2)
+        }
+        return angles
+    }
+
+    /// Gap between two folders on the arc, measured between the ovals that fit inside them.
+    private static func distance(_ a: Double, _ b: Double, radius: CGFloat) -> Double {
+        let r = Double(radius)
+        let dx = r * (cos(a * .pi / 180) - cos(b * .pi / 180))
+        let dy = r * (sin(a * .pi / 180) - sin(b * .pi / 180))
+        let d = hypot(dx, dy)
+        guard d > 0 else { return -Double(folder.width) }
+        // The oval's radius in the direction of the neighbour.
+        let ax = Double(folder.width) / 2, by = Double(folder.height) / 2
+        let reach = ax * by / hypot(by * dx / d, ax * dy / d)
+        return d - 2 * reach
     }
 }
 
@@ -70,6 +126,9 @@ struct DroppedFiles: Identifiable {
 
 private struct BrandPanel: View {
     let hovered: Category?
+    let search: SearchState
+    var searchFocused: FocusState<Bool>.Binding
+    let onOpen: (ToolInfo) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -87,9 +146,27 @@ private struct BrandPanel: View {
                 .frame(maxWidth: 360, alignment: .leading)
                 .padding(.top, 6)
 
-            PeekCard(category: hovered)
-                .frame(height: 196, alignment: .top)
-                .padding(.top, 34)
+            SearchField(search: search, focused: searchFocused, onOpen: onOpen)
+                .frame(width: 380)
+                .padding(.top, 22)
+
+            Group {
+                if search.isActive {
+                    SearchResults(search: search, onOpen: onOpen)
+                        .frame(width: 380, alignment: .topLeading)
+                        .frame(maxHeight: 200, alignment: .top)
+                        .fixedSize(horizontal: false, vertical: search.results.count < 4)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Theme.panel.opacity(0.7)))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.line))
+                        .transition(.opacity.combined(with: .offset(y: -4)))
+                } else {
+                    PeekCard(category: hovered)
+                        .transition(.opacity)
+                }
+            }
+            .frame(height: 200, alignment: .top)
+            .padding(.top, 14)
+            .animation(.easeOut(duration: 0.16), value: search.isActive)
 
             Spacer(minLength: 0)
             HStack(spacing: 8) {
@@ -144,7 +221,7 @@ private struct PeekCard: View {
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Hover a folder to peek inside.")
+                        Text("Search above, or hover a folder to peek inside.")
                             .font(.system(size: 13.5, weight: .medium))
                             .foregroundStyle(Theme.ink.opacity(0.85))
                         Text("Or drop any file on this window and OpenRecast will suggest what it can become.")
@@ -312,6 +389,7 @@ private struct DropSuggestions: View {
 struct ToolRowLabel: View {
     let tool: ToolInfo
     let selected: Bool
+    var showsCategory = false
     @State private var hovering = false
 
     var body: some View {
@@ -326,6 +404,14 @@ struct ToolRowLabel: View {
                 Text(tool.summary).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
             }
             Spacer(minLength: 0)
+            if showsCategory {
+                Text(tool.category.title)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(tool.category.tint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(tool.category.tint.opacity(0.14)))
+            }
         }
         .padding(7)
         .background(RoundedRectangle(cornerRadius: 11).fill(Theme.ink.opacity(selected ? 0.08 : hovering ? 0.04 : 0)))

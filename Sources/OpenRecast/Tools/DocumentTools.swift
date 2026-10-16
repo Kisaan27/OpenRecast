@@ -5,6 +5,10 @@ import UniformTypeIdentifiers
 
 extension Toolbox {
     static let documents: [ToolInfo] = [
+        ToolInfo("doc-edit", "Edit Document", "Open a document, fix it up, and save it as Word, PDF, RTF and more.",
+                 symbol: "square.and.pencil", category: .documents, types: DocumentFormat.readable,
+                 extensions: ["docx", "doc", "odt", "rtf", "txt", "md", "markdown", "html", "htm", "webarchive"],
+                 multiple: false, runLabel: "Save") { EditDocumentTool() },
         ToolInfo("doc-convert", "Convert Document", "Word, OpenDocument, RTF, HTML and plain text to each other or PDF.",
                  symbol: "arrow.triangle.2.circlepath", category: .documents, types: DocumentFormat.readable,
                  extensions: ["docx", "doc", "odt", "rtf", "txt", "md", "markdown", "html", "htm", "webarchive"]) { ConvertDocumentTool() },
@@ -91,15 +95,60 @@ final class ConvertDocumentTool: FileTool {
 
     @MainActor
     private static func printPDF(_ url: URL, to dest: URL, paper: String) throws {
+        try DocumentText.printPDF(DocumentText.read(url), to: dest, paper: paper, name: url.lastPathComponent)
+    }
+
+    struct Options: View {
+        @Bindable var tool: ConvertDocumentTool
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                if !tool.fixed {
+                    OptionRow("Convert to") {
+                        Chips(selection: $tool.format, options: tool.choices.map { ($0, $0.title) }, recommended: tool.best)
+                    }
+                }
+                if tool.format == .pdf {
+                    OptionRow("Paper") { Chips(selection: $tool.paper, options: [("a4", "A4"), ("letter", "US Letter")]) }
+                }
+            }
+        }
+    }
+}
+
+/// Reading and writing rich text in every document format the app handles.
+enum DocumentText {
+    static func read(_ url: URL) throws -> NSAttributedString {
         var options: [NSAttributedString.DocumentReadingOptionKey: Any] = [:]
         if ["md", "markdown", "txt"].contains(url.pathExtension.lowercased()) {
             options[.documentType] = NSAttributedString.DocumentType.plain
         }
-        let text: NSAttributedString
-        do { text = try NSAttributedString(url: url, options: options, documentAttributes: nil) } catch {
+        do { return try NSAttributedString(url: url, options: options, documentAttributes: nil) } catch {
             throw ToolError("Couldn't read \(url.lastPathComponent).")
         }
+    }
 
+    /// Writes `text` as any format except PDF (see `printPDF`).
+    static func write(_ text: NSAttributedString, as format: DocumentFormat, to dest: URL) throws {
+        let type: NSAttributedString.DocumentType = switch format {
+        case .docx: .officeOpenXML
+        case .doc: .docFormat
+        case .odt: .openDocument
+        case .rtf: .rtf
+        case .html: .html
+        case .txt, .pdf: .plain
+        }
+        var attributes: [NSAttributedString.DocumentAttributeKey: Any] = [.documentType: type]
+        if type == .plain || type == .html { attributes[.characterEncoding] = String.Encoding.utf8.rawValue }
+        do {
+            let data = try text.data(from: NSRange(location: 0, length: text.length), documentAttributes: attributes)
+            try data.write(to: dest, options: .atomic)
+        } catch {
+            throw ToolError("Couldn't save \(dest.lastPathComponent).")
+        }
+    }
+
+    @MainActor
+    static func printPDF(_ text: NSAttributedString, to dest: URL, paper: String, name: String) throws {
         let info = NSPrintInfo(dictionary: [.jobSavingURL: dest])
         info.jobDisposition = .save
         info.paperSize = paper == "a4" ? NSSize(width: 595.28, height: 841.89) : NSSize(width: 612, height: 792)
@@ -126,23 +175,7 @@ final class ConvertDocumentTool: FileTool {
         op.showsPrintPanel = false
         op.showsProgressPanel = false
         guard op.run(), FileManager.default.fileExists(atPath: dest.path) else {
-            throw ToolError("Couldn't create a PDF from \(url.lastPathComponent).")
-        }
-    }
-
-    struct Options: View {
-        @Bindable var tool: ConvertDocumentTool
-        var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
-                if !tool.fixed {
-                    OptionRow("Convert to") {
-                        Chips(selection: $tool.format, options: tool.choices.map { ($0, $0.title) }, recommended: tool.best)
-                    }
-                }
-                if tool.format == .pdf {
-                    OptionRow("Paper") { Chips(selection: $tool.paper, options: [("a4", "A4"), ("letter", "US Letter")]) }
-                }
-            }
+            throw ToolError("Couldn't create a PDF from \(name).")
         }
     }
 }

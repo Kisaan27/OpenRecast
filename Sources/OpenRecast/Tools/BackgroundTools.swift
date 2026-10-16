@@ -3,8 +3,8 @@ import SwiftUI
 
 extension Toolbox {
     static let background: [ToolInfo] = [
-        ToolInfo("bg-solid", "Remove Background", "Cut out white or solid-colour backgrounds from logos, products and icons.",
-                 symbol: "square.dashed", category: .background, types: [.image], runLabel: "Remove") { SolidBackgroundTool() },
+        ToolInfo("bg-solid", "Remove Background", "Lift the subject out of any photo with on-device AI, or cut out solid colours.",
+                 symbol: "person.and.background.dotted", category: .background, types: [.image], runLabel: "Remove") { RemoveBackgroundTool() },
         ToolInfo("bg-signature", "Signature Cleanup", "Lift a signature or stamp off paper into a transparent PNG.",
                  symbol: "signature", category: .background, types: [.image], runLabel: "Clean up") { SignatureTool() },
         ToolInfo("bg-chroma", "Green Screen Photo", "Key out green or blue backdrops from photos.",
@@ -16,7 +16,7 @@ extension Toolbox {
 }
 
 /// Chroma key colours used by real-world screens, not pure RGB green/blue.
-enum KeyColor: Hashable {
+enum KeyColor: Hashable, Sendable {
     case green, blue, custom
 
     var rgb: (r: Double, g: Double, b: Double) {
@@ -36,57 +36,147 @@ enum KeyColor: Hashable {
     }
 }
 
-private func saveCutout(_ px: Pixels, for url: URL, _ ctx: JobContext, suffix: String) throws -> URL {
-    let dest = Output.url(for: url, in: ctx.folder(for: url), suffix: suffix, ext: "png")
-    try ImageKit.write(px.makeImage(), to: dest, type: .png)
-    return dest
+/// Runs a photo tool's processing over each input at full size and saves PNGs.
+private func cutouts(_ inputs: [URL], _ ctx: JobContext, suffix: String,
+                     _ process: (CGImage, URL) throws -> CGImage) throws -> JobOutput {
+    var out = JobOutput()
+    for (i, url) in inputs.enumerated() {
+        try Task.checkCancellation()
+        let image = try process(ImageKit.load(url), url)
+        let dest = Output.url(for: url, in: ctx.folder(for: url), suffix: suffix, ext: "png")
+        try ImageKit.write(image, to: dest, type: .png)
+        out.files.append(dest)
+        ctx.progress(Double(i + 1) / Double(inputs.count))
+    }
+    return out
 }
 
-// MARK: - Solid colour
+/// The live preview shown at the top of each photo tool's options.
+private func preview(_ url: URL?, _ key: AnyHashable, render: @escaping PreviewRender) -> some View {
+    CutoutPreview(url: url, key: key, tint: Category.background.tint, render: render)
+        .frame(minHeight: 150, maxHeight: .infinity)
+}
+
+// MARK: - Remove background
 
 @Observable
-final class SolidBackgroundTool: FileTool {
-    enum Pick: Hashable { case auto, white, custom }
+final class RemoveBackgroundTool: FileTool {
+    enum Method: Hashable, Sendable { case subject, solid }
+    enum Pick: Hashable, Sendable { case auto, white, custom }
+    enum Fill: Hashable, Sendable { case transparent, white, custom }
+
+    var method: Method = .subject
+    // Subject
+    var shift = 0.0
+    var feather = 0.5
+    var cleanEdges = true
+    // Solid colour
     var pick: Pick = .auto
     var custom = Color.white
     var tolerance = 20.0
     var edgesOnly = true
     var softness = 1.0
+    // Result
+    var fill: Fill = .transparent
+    var fillColor = Color.white
+    var crop = false
+
+    var first: URL?
+
+    struct Settings: Hashable, Sendable {
+        var method: Method
+        var shift, feather: Double
+        var cleanEdges: Bool
+        var pick: Pick
+        var custom: Swatch
+        var tolerance: Double
+        var edgesOnly: Bool
+        var softness: Double
+        var fill: Swatch?
+        var crop: Bool
+    }
+
+    var settings: Settings {
+        Settings(method: method, shift: shift, feather: feather, cleanEdges: cleanEdges, pick: pick, custom: Swatch(custom),
+                 tolerance: tolerance, edgesOnly: edgesOnly, softness: softness,
+                 fill: fill == .transparent ? nil : fill == .white ? .white : Swatch(fillColor), crop: crop)
+    }
 
     var options: AnyView? { AnyView(Options(tool: self)) }
 
+    func inputsChanged(_ inputs: [URL]) { first = inputs.first }
+
     func run(_ inputs: [URL], _ ctx: JobContext) async throws -> JobOutput {
-        var out = JobOutput()
-        let customRGB = custom.rgb255
-        for (i, url) in inputs.enumerated() {
-            try Task.checkCancellation()
-            var px = Pixels(try ImageKit.load(url))
-            let key = switch pick {
+        let s = await MainActor.run { settings }
+        return try cutouts(inputs, ctx, suffix: " no-bg") { image, _ in try Self.process(image, s, scale: 1, cacheKey: nil) }
+    }
+
+    /// `scale` shrinks pixel-sized settings for the downscaled preview.
+    static func process(_ image: CGImage, _ s: Settings, scale: Double, cacheKey: String?) throws -> CGImage {
+        var px = Pixels(image)
+        switch s.method {
+        case .subject:
+            let mask = try SubjectMask.alpha(for: image, cacheKey: cacheKey)
+            px.multiplyAlpha(px.refine(mask, shift: s.shift * scale, feather: s.feather * scale))
+            if s.cleanEdges { px.cleanEdges(radius: max(Int((4 * scale).rounded()), 2)) }
+        case .solid:
+            let key = switch s.pick {
             case .auto: px.dominantBorderColor()
             case .white: (r: 255.0, g: 255.0, b: 255.0)
-            case .custom: customRGB
+            case .custom: s.custom.rgb
             }
-            px.removeColor(key, tolerance: tolerance * 1.8, edgesOnly: edgesOnly, softness: Int(softness.rounded()))
-            out.files.append(try saveCutout(px, for: url, ctx, suffix: " no-bg"))
-            ctx.progress(Double(i + 1) / Double(inputs.count))
+            px.removeColor(key, tolerance: s.tolerance * 1.8, edgesOnly: s.edgesOnly, softness: Int((s.softness * scale).rounded()))
         }
-        return out
+        let bounds = s.crop ? px.subjectBounds(padding: 12 * scale) : nil
+        if let fill = s.fill { px.fill(fill) }
+        let out = try px.makeImage()
+        return bounds.flatMap { out.cropping(to: $0) } ?? out
     }
 
     struct Options: View {
-        @Bindable var tool: SolidBackgroundTool
+        @Bindable var tool: RemoveBackgroundTool
+
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                OptionRow("Background") {
-                    Chips(selection: $tool.pick, options: [(.auto, "Auto-detect"), (.white, "White"), (.custom, "Pick colour")])
-                    if tool.pick == .custom { ColorPicker("", selection: $tool.custom, supportsOpacity: false).labelsHidden() }
+            let s = tool.settings
+            VStack(alignment: .leading, spacing: 4) {
+                preview(tool.first, s) { req in
+                    try RemoveBackgroundTool.process(req.image, s, scale: req.scale, cacheKey: req.url.path)
                 }
-                OptionRow("Tolerance") { SliderRow(value: $tool.tolerance, range: 1...100) }
-                OptionRow("Edge softness") { SliderRow(value: $tool.softness, range: 0...4, step: 1) { "\(Int($0)) px" } }
-                OptionRow("Remove") {
-                    Chips(selection: $tool.edgesOnly, options: [(true, "Only around the subject"), (false, "Every matching pixel")])
+                .padding(.bottom, 6)
+                OptionRow("Method") {
+                    Chips(selection: $tool.method, options: [(.subject, "Subject · AI"), (.solid, "Solid colour")])
+                }
+                if tool.method == .subject {
+                    OptionRow("Edge") {
+                        SliderRow(value: $tool.shift, range: -5...5, step: 0.5) { v in
+                            v == 0 ? "As found" : String(format: "%@%.1f px", v > 0 ? "+" : "−", abs(v))
+                        }
+                        .help("Pull the edge in to drop leftover background, or push it out to keep fine detail.")
+                    }
+                    OptionRow("Softness") {
+                        SliderRow(value: $tool.feather, range: 0...6, step: 0.5) { String(format: "%.1f px", $0) }
+                        Toggle("Clean edge colour", isOn: $tool.cleanEdges)
+                            .toggleStyle(.switch).controlSize(.mini).font(.system(size: 12))
+                            .help("Removes the old background's tint from hair and soft edges.")
+                    }
+                } else {
+                    OptionRow("Background") {
+                        Chips(selection: $tool.pick, options: [(.auto, "Auto-detect"), (.white, "White"), (.custom, "Pick colour")])
+                        if tool.pick == .custom { ColorPicker("", selection: $tool.custom, supportsOpacity: false).labelsHidden() }
+                    }
+                    OptionRow("Tolerance") { SliderRow(value: $tool.tolerance, range: 1...100) }
+                    OptionRow("Edge softness") { SliderRow(value: $tool.softness, range: 0...4, step: 1) { "\(Int($0)) px" } }
+                    OptionRow("Remove") {
+                        Chips(selection: $tool.edgesOnly, options: [(true, "Only around the subject"), (false, "Every matching pixel")])
+                    }
+                }
+                OptionRow("Result") {
+                    Chips(selection: $tool.fill, options: [(.transparent, "Transparent"), (.white, "White"), (.custom, "Colour")])
+                    if tool.fill == .custom { ColorPicker("", selection: $tool.fillColor, supportsOpacity: false).labelsHidden() }
+                    Toggle("Crop to subject", isOn: $tool.crop).toggleStyle(.switch).controlSize(.mini).font(.system(size: 12))
                 }
             }
+            .frame(maxHeight: .infinity)
         }
     }
 }
@@ -95,43 +185,48 @@ final class SolidBackgroundTool: FileTool {
 
 @Observable
 final class SignatureTool: FileTool {
-    enum Ink: Hashable { case original, black, blue }
+    enum Ink: Hashable, Sendable { case original, black, blue }
     var threshold = 0.72
     var ink: Ink = .original
     var crop = true
+    var first: URL?
 
+    struct Settings: Hashable, Sendable {
+        var threshold: Double
+        var ink: Ink
+        var crop: Bool
+    }
+
+    var settings: Settings { Settings(threshold: threshold, ink: ink, crop: crop) }
     var options: AnyView? { AnyView(Options(tool: self)) }
 
+    func inputsChanged(_ inputs: [URL]) { first = inputs.first }
+
     func run(_ inputs: [URL], _ ctx: JobContext) async throws -> JobOutput {
-        var out = JobOutput()
-        for (i, url) in inputs.enumerated() {
-            try Task.checkCancellation()
-            var px = Pixels(try ImageKit.load(url))
-            let color: (r: Double, g: Double, b: Double)? = switch ink {
-            case .original: nil
-            case .black: (20, 20, 24)
-            case .blue: (18, 52, 140)
-            }
-            px.extractInk(threshold: threshold, color: color)
-            let dest = Output.url(for: url, in: ctx.folder(for: url), suffix: " signature", ext: "png")
-            var image = try px.makeImage()
-            if crop, let bounds = px.opaqueBounds() {
-                let pad = 12.0
-                let rect = bounds.insetBy(dx: -pad, dy: -pad)
-                    .intersection(CGRect(x: 0, y: 0, width: px.width, height: px.height))
-                image = image.cropping(to: rect) ?? image
-            }
-            try ImageKit.write(image, to: dest, type: .png)
-            out.files.append(dest)
-            ctx.progress(Double(i + 1) / Double(inputs.count))
+        let s = await MainActor.run { settings }
+        return try cutouts(inputs, ctx, suffix: " signature") { image, _ in try Self.process(image, s, scale: 1) }
+    }
+
+    static func process(_ image: CGImage, _ s: Settings, scale: Double) throws -> CGImage {
+        var px = Pixels(image)
+        let color: (r: Double, g: Double, b: Double)? = switch s.ink {
+        case .original: nil
+        case .black: (20, 20, 24)
+        case .blue: (18, 52, 140)
         }
-        return out
+        px.extractInk(threshold: s.threshold, color: color)
+        let out = try px.makeImage()
+        guard s.crop, let bounds = px.subjectBounds(padding: 12 * scale) else { return out }
+        return out.cropping(to: bounds) ?? out
     }
 
     struct Options: View {
         @Bindable var tool: SignatureTool
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
+            let s = tool.settings
+            VStack(alignment: .leading, spacing: 4) {
+                preview(tool.first, s) { req in try SignatureTool.process(req.image, s, scale: req.scale) }
+                    .padding(.bottom, 6)
                 OptionRow("Sensitivity") { SliderRow(value: $tool.threshold, range: 0.4...0.95) { "\(Int($0 * 100))" } }
                 OptionRow("Ink colour") {
                     Chips(selection: $tool.ink, options: [(.original, "Original"), (.black, "Black"), (.blue, "Blue")])
@@ -140,6 +235,7 @@ final class SignatureTool: FileTool {
                     Toggle("Trim to the signature", isOn: $tool.crop).toggleStyle(.switch).controlSize(.small).font(.system(size: 12.5))
                 }
             }
+            .frame(maxHeight: .infinity)
         }
     }
 }
@@ -153,27 +249,39 @@ final class ChromaKeyImageTool: FileTool {
     var tolerance = 45.0
     var softness = 30.0
     var despill = true
+    var first: URL?
 
+    struct Settings: Hashable, Sendable {
+        var key: KeyColor
+        var custom: Swatch
+        var tolerance, softness: Double
+        var despill: Bool
+    }
+
+    var settings: Settings { Settings(key: key, custom: Swatch(custom), tolerance: tolerance, softness: softness, despill: despill) }
     var options: AnyView? { AnyView(Options(tool: self)) }
 
+    func inputsChanged(_ inputs: [URL]) { first = inputs.first }
+
     func run(_ inputs: [URL], _ ctx: JobContext) async throws -> JobOutput {
-        var out = JobOutput()
-        let rgb = key == .custom ? custom.rgb255 : key.rgb
-        for (i, url) in inputs.enumerated() {
-            try Task.checkCancellation()
-            var px = Pixels(try ImageKit.load(url))
-            px.chromaKey(rgb, tolerance: tolerance * 0.9, softness: softness * 0.6,
-                         despill: despill ? key : nil)
-            out.files.append(try saveCutout(px, for: url, ctx, suffix: " keyed"))
-            ctx.progress(Double(i + 1) / Double(inputs.count))
-        }
-        return out
+        let s = await MainActor.run { settings }
+        return try cutouts(inputs, ctx, suffix: " keyed") { image, _ in try Self.process(image, s) }
+    }
+
+    static func process(_ image: CGImage, _ s: Settings) throws -> CGImage {
+        var px = Pixels(image)
+        px.chromaKey(s.key == .custom ? s.custom.rgb : s.key.rgb, tolerance: s.tolerance * 0.9, softness: s.softness * 0.6,
+                     despill: s.despill && s.key != .custom ? s.key : nil)
+        return try px.makeImage()
     }
 
     struct Options: View {
         @Bindable var tool: ChromaKeyImageTool
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
+            let s = tool.settings
+            VStack(alignment: .leading, spacing: 4) {
+                preview(tool.first, s) { req in try ChromaKeyImageTool.process(req.image, s) }
+                    .padding(.bottom, 6)
                 OptionRow("Screen") {
                     Chips(selection: $tool.key, options: [(.green, "Green"), (.blue, "Blue"), (.custom, "Pick colour")])
                     if tool.key == .custom { ColorPicker("", selection: $tool.custom, supportsOpacity: false).labelsHidden() }
@@ -187,6 +295,7 @@ final class ChromaKeyImageTool: FileTool {
                     }
                 }
             }
+            .frame(maxHeight: .infinity)
         }
     }
 }
