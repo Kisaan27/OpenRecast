@@ -96,7 +96,7 @@
     var owner = location.hostname.split(".")[0];
     var repo = location.pathname.split("/").filter(Boolean)[0] || "OpenRecast";
     var base = "https://github.com/" + owner + "/" + repo;
-    document.getElementById("download").href = base + "/releases/latest";
+    document.getElementById("download").href = base + "/releases/latest/download/OpenRecast.dmg";
     document.getElementById("source").href = base;
   })();
 </script>
